@@ -2,3 +2,4 @@ python-telegram-bot
 requests
 asyncio
 python-dotenv
+tweepy
