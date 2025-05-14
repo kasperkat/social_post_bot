@@ -11,6 +11,7 @@ import subprocess
 import base64
 import json
 import tweepy
+from instagrapi import Client
 
 
 load_dotenv()
@@ -79,11 +80,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
         # Handle the posting here
-        to_insta(file_path, caption)
         to_x(file_path, caption)
+        to_insta(file_path, caption)
+        
         
 
-
+        print('out')
 
 
 
@@ -145,14 +147,6 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-def to_insta(img_path, post_caption):
-    '''Handle posting to Insta'''
-
-    print('Posting in Insta')
-    print(f'Image path: {img_path}')
-    print(f'Caption: {post_caption}')
-    return
-
 
 
 
@@ -198,14 +192,40 @@ def to_x(img_path: str, tweet_text: str):
 
 
 
+SESSION_FILE = "insta_session.json"
 
+USERNAME = os.getenv("IG_USER")
+PASSWORD = os.getenv("IG_PASSWORD")
 
+def login_to_instagram():
+    """Logs into Instagram or restores an existing session."""
+    client = Client()
 
+    # Load saved session if available
+    if os.path.exists(SESSION_FILE):
+        client.load_settings(SESSION_FILE)
+        try:
+            # Verify session is still valid
+            client.get_timeline_feed()
+            print("✅ Session restored successfully!")
+            return client
+        except:
+            print("⚠️ Session expired, logging in again...")
 
+    # If session is invalid, perform a new login
+    client.login(USERNAME, PASSWORD)
 
+    # Save session for future use
+    client.dump_settings(SESSION_FILE)
+    print("🔄 New session saved!")
 
+    return client
 
-
+def to_insta(image_path, caption):
+    """Posts an image without requiring login every time."""
+    client = login_to_instagram()
+    media = client.photo_upload(image_path, caption)
+    return f"✅ Posted successfully to Insta! Media ID: {media.dict().get('id')}"
 
 
 

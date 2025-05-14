@@ -3,3 +3,6 @@ requests
 asyncio
 python-dotenv
 tweepy
+
+instagrapi
+pillow
