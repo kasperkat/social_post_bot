@@ -105,10 +105,12 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await file.download_to_drive(file_path)
 
 
-    # post image and captio here
+
+    to_insta( file_path, caption )
 
 
-    await update.message.reply_text(f'got your imge with a caption: "{caption}"')
+
+    await update.message.reply_text(f'Got your image with a caption: "{caption}"')
 
     os.remove(file_path)
 
@@ -136,6 +138,20 @@ def run_telebot():
     app.context_types.context.user_states = user_states
     print("Listening...")
     app.run_polling()
+
+
+
+
+
+
+
+
+
+
+def to_insta( img_path, post_caption ):
+    print('Posting in Insta')
+    return
+
 
 
 
