@@ -1,8 +1,7 @@
-from typing import Final
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, TypeHandler, ApplicationHandlerStop, CallbackContext
+from typing import Final, Dict
+from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, TypeHandler, ApplicationHandlerStop, CallbackContext, ConversationHandler
 from dotenv import load_dotenv
-from typing import Final
 import asyncio
 import random
 import requests
@@ -27,9 +26,14 @@ print(f"BOT_USERNAME: {BOT_USERNAME}")
 print(f"CREATOR_ID: {CREATOR_ID}")
 
 
+CONFIRMING = 0
+
+pending_images = {}
+
+TEMP_FOLDER = './img_tmp'
+
 
 def handle_response(text: str) ->str:
-
     processed: str = text.lower()
 
     if 'hello' == processed:
@@ -38,17 +42,13 @@ def handle_response(text: str) ->str:
     return "I literally can't even answer that"
 
 
-
 async def start_function(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=update.effective_chat.id, text="I'm Toga!")
-
-
 
 
 async def handler_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     command_functions = {
         '/start': start_function,
-
     }
 
     if update.message.text not in command_functions:
@@ -57,62 +57,103 @@ async def handler_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await command_functions[update.message.text](update, context)
 
 
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-
-
-async def handle_message( update: Update, context: ContextTypes.DEFAULT_TYPE ):
-
-    message_type: str = update.message.chat.type
-    text: str = update.message.text
-
-    response: str = handle_response( text )
-
-    await update.message.reply_text(response)
+    user_id = update.effective_user.id
+    if user_id not in pending_images:
+        message_type: str = update.message.chat.type
+        text: str = update.message.text
+        response: str = handle_response(text)
+        await update.message.reply_text(response)
+        print('Done')
+        return
+    
+    text = update.message.text.lower()
+    
+    if text == 'yes':
+        image_info = pending_images[user_id]
+        file_path = image_info['file_path']
+        caption = image_info['caption']
         
-    print('Done')
 
 
+        # Handle the posting here
+        to_insta(file_path, caption)
+        
+
+
+
+
+
+        await update.message.reply_text(
+            f"Image posted to Instagram with caption: \"{caption}\"", 
+            reply_markup=ReplyKeyboardRemove()
+        )
+    elif text == 'no':
+        await update.message.reply_text(
+            "Image post cancelled.", 
+            reply_markup=ReplyKeyboardRemove()
+        )
+    else:
+        await update.message.reply_text("Please select Yes or No from the keyboard.")
+        return
+    
+    file_path = pending_images[user_id]['file_path']
+    if os.path.exists(file_path):
+        os.remove(file_path)
+    
+    del pending_images[user_id]
 
 
 async def error(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print( f'Update {update} caused error {context.error}' )
+    print(f'Update {update} caused error {context.error}')
 
 
-
-async def whitelist_users( update: Update, context: ContextTypes.DEFAULT_TYPE ):
-    if( update.effective_chat.id != CREATOR_ID or update.message.chat.type != 'private' ):
-        # await update.effective_message.reply_text('ayo', reply_to_message)
+async def whitelist_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat.id != CREATOR_ID or update.message.chat.type != 'private':
         raise ApplicationHandlerStop
 
 
-
-
-
-
-
-TEMP_FOLDER = './img_tmp'
-
-
 async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
     file = await context.bot.get_file(update.message.photo[-1].file_id)
     caption = update.message.caption if update.message.caption else ""
+    user_id = update.effective_user.id
 
     if not os.path.exists(TEMP_FOLDER):
         os.makedirs(TEMP_FOLDER)
 
     file_path = os.path.join(TEMP_FOLDER, f"{file.file_id}.jpeg")
     await file.download_to_drive(file_path)
+    
+    pending_images[user_id] = {
+        'file_path': file_path,
+        'caption': caption
+    }
+    
+    reply_keyboard = [['Yes', 'No']]
+    markup = ReplyKeyboardMarkup(
+        reply_keyboard, 
+        one_time_keyboard=True,
+        resize_keyboard=True
+    )
+    
+    await update.message.reply_text(
+        f'Do you want to post this image with the text: "{caption}"?',
+        reply_markup=markup
+    )
+
+
+def to_insta(img_path, post_caption):
+    '''Handle posting to Insta'''
+
+    print('Posting in Insta')
+    print(f'Image path: {img_path}')
+    print(f'Caption: {post_caption}')
+    return
 
 
 
-    to_insta( file_path, caption )
 
-
-
-    await update.message.reply_text(f'Got your image with a caption: "{caption}"')
-
-    os.remove(file_path)
 
 
 
@@ -121,15 +162,15 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def run_telebot():
     print("Starting bot")
-    app = Application.builder().token( TOKEN ).build()
+    app = Application.builder().token(TOKEN).build()
     filter_users = TypeHandler(Update, whitelist_users)
-    app.add_handler( filter_users, -1 )
+    app.add_handler(filter_users, -1)
 
     command_handler = MessageHandler(filters.COMMAND, handler_command)
-    message_handler = MessageHandler( filters.TEXT & ( ~filters.COMMAND ), handle_message )
+    message_handler = MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message)
     image_handler = MessageHandler(filters.PHOTO, handle_image)
 
-    handlers = [ command_handler, message_handler,  image_handler ]
+    handlers = [command_handler, message_handler, image_handler]
 
     for handler in handlers:
         app.add_handler(handler)
@@ -140,25 +181,5 @@ def run_telebot():
     app.run_polling()
 
 
-
-
-
-
-
-
-
-
-def to_insta( img_path, post_caption ):
-    print('Posting in Insta')
-    return
-
-
-
-
 if __name__ == '__main__':
-
     run_telebot()
-
-
-
-
