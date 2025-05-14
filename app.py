@@ -10,6 +10,7 @@ import os
 import subprocess
 import base64
 import json
+import tweepy
 
 
 load_dotenv()
@@ -79,6 +80,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Handle the posting here
         to_insta(file_path, caption)
+        to_x(file_path, caption)
         
 
 
@@ -150,6 +152,60 @@ def to_insta(img_path, post_caption):
     print(f'Image path: {img_path}')
     print(f'Caption: {post_caption}')
     return
+
+
+
+
+
+
+bearer_token = os.getenv("X_BEARER_TOKEN")
+consumer_key = os.getenv("X_API_KEY")
+consumer_secret = os.getenv("X_API_SECRET")
+access_token = os.getenv("X_ACCESS_TOKEN")
+access_token_secret = os.getenv("X_ACCESS_SECRET")
+
+# Authenticate Twitter API
+auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
+auth.set_access_token(access_token, access_token_secret)
+api = tweepy.API(auth, wait_on_rate_limit=True)
+
+client = tweepy.Client(
+    bearer_token,
+    consumer_key,
+    consumer_secret,
+    access_token,
+    access_token_secret,
+    wait_on_rate_limit=True,
+)
+
+def to_x(img_path: str, tweet_text: str):
+    """Posts an image and text to Twitter (X)."""
+    try:
+        # Upload image to Twitter
+        media_id = api.media_upload(filename=img_path).media_id_string
+
+        # Post Tweet with text and image
+        response = client.create_tweet(text=tweet_text, media_ids=[media_id])
+        print(f"Tweeted! Tweet ID: {response.data['id']}")
+
+    except Exception as e:
+        print(f"Error posting tweet: {e}")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
