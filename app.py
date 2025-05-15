@@ -11,8 +11,8 @@ import subprocess
 import base64
 import json
 import tweepy
-from instagrapi import Client
-
+from instagrapi import Client as IG_Client
+from atproto import Client as ASK_Client, models
 
 load_dotenv()
 
@@ -80,17 +80,34 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
         # Handle the posting here
-        to_x(file_path, caption)
-        to_insta(file_path, caption)
-        
+        posted_to_x = to_x(file_path, caption)
+        posted_to_insta = to_insta(file_path, caption)
+        posted_to_bluesky = to_bluesky(file_path, caption)
         
 
-        print('out')
+        msg = "Report:\n"
+        if(posted_to_x):
+            msg += "\n✔️ X"
+        else:
+            msg += "\n❌ X"
+
+
+        if(posted_to_insta):
+            msg += "\n✔️ Instagram"
+        else:
+            msg += "\n❌ Instagram"
+
+        
+        if(posted_to_bluesky):
+            msg += "\n✔️ Bluesky"
+        else:
+            msg += "\n❌ Bluesky"
+
 
 
 
         await update.message.reply_text(
-            f"Image posted to Instagram with caption: \"{caption}\"", 
+            f"{msg}", 
             reply_markup=ReplyKeyboardRemove()
         )
     elif text == 'no':
@@ -172,6 +189,9 @@ client = tweepy.Client(
     wait_on_rate_limit=True,
 )
 
+
+
+
 def to_x(img_path: str, tweet_text: str):
     """Posts an image and text to Twitter (X)."""
     try:
@@ -181,12 +201,11 @@ def to_x(img_path: str, tweet_text: str):
         # Post Tweet with text and image
         response = client.create_tweet(text=tweet_text, media_ids=[media_id])
         print(f"Tweeted! Tweet ID: {response.data['id']}")
+        return True
 
     except Exception as e:
         print(f"Error posting tweet: {e}")
-
-
-
+        return False
 
 
 
@@ -199,7 +218,7 @@ PASSWORD = os.getenv("IG_PASSWORD")
 
 def login_to_instagram():
     """Logs into Instagram or restores an existing session."""
-    client = Client()
+    client = IG_Client()
 
     # Load saved session if available
     if os.path.exists(SESSION_FILE):
@@ -225,14 +244,59 @@ def to_insta(image_path, caption):
     """Posts an image without requiring login every time."""
     client = login_to_instagram()
     media = client.photo_upload(image_path, caption)
-    return f"✅ Posted successfully to Insta! Media ID: {media.dict().get('id')}"
+
+    media_id = media.dict().get('id')
+    if media_id:
+        return True
+    else:
+        return False
 
 
 
 
 
+def to_bluesky(image_path, caption):
+    BSKY_USERNAME = os.getenv("BSKY_USER")
+    BSKY_PASSWORD = os.getenv("BSKY_PASSWORD")
+
+    if not BSKY_USERNAME or not BSKY_PASSWORD:
+        raise Exception("Bluesky credentials missing. Set BSKY_USER and BSKY_PASSWORD.")
+
+    client = ASK_Client()
+    
+    try:
+        client.login(BSKY_USERNAME, BSKY_PASSWORD)
+    except Exception as e:
+        raise Exception(f"Login failed: {e}")
+
+    try:
+        with open(image_path, "rb") as f:
+            img_data = f.read()
+        
+        
+        image_response = client.upload_blob(img_data)
+        image_blob = image_response.blob
+
+        
+        embed = models.AppBskyEmbedImages.Main(
+            images=[models.AppBskyEmbedImages.Image(
+                alt=caption,
+                image=image_blob
+            )]
+        )
 
 
+        post = client.send_post(
+            text=caption,
+            embed=embed  
+        )
+        
+        print("Post created successfully:", post.uri)
+        return True
+
+    except Exception as e:
+        print(f"Image upload failed: {e}. No post was created.")
+        return False
 
 
 
